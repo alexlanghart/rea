@@ -1062,6 +1062,30 @@ Each line is `address<TAB>kind[<TAB>name]`, where kind is `function`, `code` or 
 
 Label seeds can name mapped uninitialized storage such as `.bss`; function and code seeds require initialized bytes.
 
+### Reusing analyzed programs across sessions
+
+Each session normally imports and auto-analyzes the target again. For large
+targets, keep finished analyses in a directory you own:
+
+```bash
+export REA_GHIDRA_PROGRAM_ARCHIVE_DIR=/absolute/path/to/ghidra-archives
+```
+
+The directory must already exist. Archives are named
+`<target-sha256>-<profile-digest>.gzf`, where the profile digest covers every
+analysis-affecting setting (Ghidra version, seeds, disabled analyzers, language,
+extensions). When no archive matches, the session analyzes normally and a
+post-script saves the analyzed program (after the no-return repair) as a packed
+Ghidra archive before serving; the archive is linked into place only when
+complete and never replaces an existing file. When one matches, the session
+imports it with `-noanalysis` and runs only the bridge, still in an ephemeral
+project. The bridge refuses the session unless the archive's executable digest
+matches the target and its stored key matches the profile.
+
+Archives contain the analysis only: names and comments set during a session are
+not saved. A save failure is reported as a limitation and leaves the session
+usable. Delete archives to force re-analysis. Not supported on Windows Ghidra P0.
+
 To skip a named Ghidra auto-analyzer (for example, when default auto-analysis
 stalls in one analyzer on a Swift/Objective-C arm64 Mach-O):
 

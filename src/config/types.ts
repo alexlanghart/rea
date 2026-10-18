@@ -16,6 +16,8 @@ export interface AppConfig {
   readonly ghidraLanguageOverride?: GhidraLanguageOverride;
   readonly ghidraDisabledAnalyzers?: readonly string[];
   readonly ghidraSeedFile?: string;
+  /** Directory of analyzed-program archives reused across Ghidra sessions. */
+  readonly ghidraProgramArchiveDir?: string;
   readonly ghidraNativeAotJar?: string;
   readonly ilspyCmdPath: string | undefined;
   readonly hopperLauncherPath: string;

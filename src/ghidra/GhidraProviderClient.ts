@@ -16,6 +16,11 @@ import {
   ghidraSeedLimitations,
 } from "./GhidraAnalysisSeeds.js";
 import {
+  ghidraProgramArchiveCommitmentSchema,
+  ghidraProgramArchiveFailure,
+  ghidraProgramArchiveLimitations,
+} from "./GhidraProgramArchive.js";
+import {
   ghidraPinnedLanguage,
   ghidraProfileDisabledAnalyzers,
   ghidraProfileLanguageOverride,
@@ -202,6 +207,25 @@ export const createGhidraProviderClient = (input: {
       }),
     );
   const seeds = seedProfile.data;
+  const archiveProfile = ghidraProgramArchiveCommitmentSchema
+    .optional()
+    .safeParse(committedProfile.parameters.program_archive);
+  if (
+    !archiveProfile.success ||
+    (config.ghidraProgramArchiveDir === undefined) !==
+      (archiveProfile.data === undefined) ||
+    (archiveProfile.data !== undefined &&
+      archiveProfile.data.target_sha256 !== target.sha256)
+  )
+    return err(
+      new ProviderAdapterError("ghidra", "open_binary", {
+        diagnostics: {
+          reason:
+            "Resolve REA_GHIDRA_PROGRAM_ARCHIVE_DIR into an analysis profile for this target before opening the session.",
+        },
+      }),
+    );
+  const programArchive = archiveProfile.data;
   const parameterLanguage = ghidraProfileLanguageOverride(
     committedProfile.parameters,
   );
@@ -281,6 +305,10 @@ export const createGhidraProviderClient = (input: {
   let extensionFailure: AnalysisError | undefined;
   // Replaced by the reported outcome once the session handshake is checked.
   const seedLimitations: string[] = [...ghidraSeedLimitations(seeds)];
+  // Replaced by the reported save outcome once the handshake is checked.
+  const archiveLimitations: string[] = [
+    ...ghidraProgramArchiveLimitations(programArchive),
+  ];
   const pdbLimitations: string[] = [];
   // Replaced by the reported storage outcome once the handshake is checked.
   const softFloatLimitations: string[] = [
@@ -371,6 +399,7 @@ export const createGhidraProviderClient = (input: {
         ? {}
         : { disabledAnalyzers: config.ghidraDisabledAnalyzers }),
       ...(seeds === undefined ? {} : { analysisSeeds: seeds }),
+      ...(programArchive === undefined ? {} : { programArchive }),
       platform: installation.platform,
       ...(extensions.length === 0 ? {} : { analysisExtensions: extensions }),
     }),
@@ -439,6 +468,11 @@ export const createGhidraProviderClient = (input: {
         operation,
       ) ??
       ghidraSeedFailure(seeds, info.analysis_seeds, operation) ??
+      ghidraProgramArchiveFailure(
+        programArchive,
+        info.program_archive?.key,
+        operation,
+      ) ??
       (softFloatReason === undefined
         ? undefined
         : new ProviderAdapterError("ghidra", operation, {
@@ -449,6 +483,15 @@ export const createGhidraProviderClient = (input: {
         0,
         seedLimitations.length,
         ...ghidraSeedLimitations(seeds, info.analysis_seeds),
+      );
+    if (extensionFailure === undefined && info.program_archive !== undefined)
+      archiveLimitations.splice(
+        0,
+        archiveLimitations.length,
+        ...ghidraProgramArchiveLimitations(
+          programArchive,
+          info.program_archive.saved,
+        ),
       );
     if (extensionFailure === undefined)
       softFloatLimitations.splice(
@@ -479,6 +522,7 @@ export const createGhidraProviderClient = (input: {
     ...softFloatLimitations,
     ...ghidraExtensionLimitations(extensions),
     ...seedLimitations,
+    ...archiveLimitations,
     ...pdbLimitations,
     ...(releaseLimitation === undefined ? [] : [releaseLimitation]),
   ];
@@ -625,6 +669,7 @@ export const createGhidraProviderClient = (input: {
         target.format === "pe" ||
         extensions.length > 0 ||
         seeds !== undefined ||
+        programArchive !== undefined ||
         softFloat
       ) {
         const started = await client.start(options?.signal, options?.progress);

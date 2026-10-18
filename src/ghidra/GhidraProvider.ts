@@ -53,6 +53,7 @@ import {
 import { resolveGhidraAnalysisProfile } from "./GhidraAnalysisProfile.js";
 import { AnalysisCancelledError } from "../domain/analysisErrorCore.js";
 import { resolveGhidraAnalysisSeeds } from "./GhidraAnalysisSeeds.js";
+import { resolveGhidraProgramArchive } from "./GhidraProgramArchive.js";
 import {
   admitGhidraLanguageOverride,
   GhidraLanguageCatalogCleanupError,
@@ -452,19 +453,41 @@ export class GhidraProvider implements AnalysisProviderCandidate {
       options?.signal,
     );
     if (!seeds.ok) return seeds;
-    if (extensions.value.length === 0 && seeds.value === undefined)
+    const analyzed =
+      extensions.value.length === 0 && seeds.value === undefined
+        ? resolved.value.profile
+        : createAnalysisProfile(resolved.value.profile.provider, {
+            ...resolved.value.profile.parameters,
+            ...(extensions.value.length === 0
+              ? {}
+              : {
+                  analysis_extensions: jsonValueSchema.parse(extensions.value),
+                }),
+            ...(seeds.value === undefined
+              ? {}
+              : { analysis_seeds: jsonValueSchema.parse(seeds.value) }),
+          });
+    // The archive key is the digest of every analysis-affecting input above, so
+    // a changed seed file, analyzer set or provider version selects a new archive.
+    const archive = await resolveGhidraProgramArchive(
+      this.config.ghidraProgramArchiveDir,
+      target.sha256,
+      analyzed.digest,
+      installation.platform,
+      target.path,
+    );
+    if (!archive.ok) return archive;
+    if (archive.value === undefined && analyzed === resolved.value.profile)
       return resolved;
     return ok({
       ...resolved.value,
-      profile: createAnalysisProfile(resolved.value.profile.provider, {
-        ...resolved.value.profile.parameters,
-        ...(extensions.value.length === 0
-          ? {}
-          : { analysis_extensions: jsonValueSchema.parse(extensions.value) }),
-        ...(seeds.value === undefined
-          ? {}
-          : { analysis_seeds: jsonValueSchema.parse(seeds.value) }),
-      }),
+      profile:
+        archive.value === undefined
+          ? analyzed
+          : createAnalysisProfile(analyzed.provider, {
+              ...analyzed.parameters,
+              program_archive: jsonValueSchema.parse(archive.value),
+            }),
     });
   }
 

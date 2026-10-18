@@ -83,6 +83,13 @@ const sessionInfoSchema = z
       .optional(),
     analysis_extensions: z.array(ghidraExtensionResultSchema).optional(),
     analysis_seeds: ghidraSeedReportSchema.optional(),
+    program_archive: z
+      .object({
+        key: z.string().regex(/^[a-f0-9]{64}$/u),
+        saved: z.boolean(),
+      })
+      .strict()
+      .optional(),
     mips_soft_float_storage: z
       .object({
         policy: z.literal(GHIDRA_MIPS_SOFT_FLOAT_STORAGE),

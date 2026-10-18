@@ -527,6 +527,17 @@ public final class ReaGhidraBridge extends HeadlessScript {
         String softFloat = currentProgram.getOptions(ghidra.program.model.listing.Program.PROGRAM_INFO)
             .getString("REA MIPS soft-float storage", null);
         if (softFloat != null) result.add("mips_soft_float_storage", JsonParser.parseString(softFloat));
+        // Written by ReaGhidraSaveProgramArchive when this program was saved
+        // to, or loaded from, a program archive; REA checks the key.
+        String archiveKey = currentProgram.getOptions(ghidra.program.model.listing.Program.PROGRAM_INFO)
+            .getString("REA program archive key", null);
+        if (archiveKey != null) {
+            JsonObject archive = new JsonObject();
+            archive.addProperty("key", archiveKey);
+            archive.addProperty("saved", currentProgram.getOptions(ghidra.program.model.listing.Program.PROGRAM_INFO)
+                .getBoolean("REA program archive saved", false));
+            result.add("program_archive", archive);
+        }
         return result;
     }
 

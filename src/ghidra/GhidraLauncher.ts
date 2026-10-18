@@ -4,6 +4,7 @@ import {
   snapshotGhidraAnalysisSeeds,
   type GhidraSeedCommitment,
 } from "./GhidraAnalysisSeeds.js";
+import type { GhidraProgramArchiveCommitment } from "./GhidraProgramArchive.js";
 import type { GhidraLanguageOverride } from "../config/ghidraLanguageOverride.js";
 import { snapshotEnvironment } from "../process/snapshotEnvironment.js";
 import { mkdir, realpath } from "node:fs/promises";
@@ -237,6 +238,8 @@ export interface GhidraHeadlessLauncherOptions {
   readonly disabledAnalyzers?: readonly string[];
   /** Caller seeds committed by the analysis profile, applied before analysis. */
   readonly analysisSeeds?: GhidraSeedCommitment;
+  /** Analyzed-program archive committed by the profile: loaded or created. */
+  readonly programArchive?: GhidraProgramArchiveCommitment;
   readonly analysisExtensions?: readonly GhidraExtension[];
   readonly pspExtension?: GhidraPspExtension;
   /** Remap typed float storage for the soft-float o32 ABI after analysis. */
@@ -325,7 +328,11 @@ export class GhidraHeadlessLauncher implements GhidraLauncher {
           throw new GhidraLaunchError(
             "Configured Ghidra artifacts require a caller-owned resource scope.",
           );
-        if (this.options.analysisSeeds !== undefined)
+        // A loaded archive already carries the applied seeds and their report.
+        if (
+          this.options.analysisSeeds !== undefined &&
+          this.options.programArchive?.mode !== "load"
+        )
           seedPath = await snapshotGhidraAnalysisSeeds(
             this.options.analysisSeeds,
             session.runtimeRoot,
@@ -389,6 +396,15 @@ export class GhidraHeadlessLauncher implements GhidraLauncher {
         ...(this.options.disabledAnalyzers === undefined
           ? {}
           : { disabledAnalyzers: this.options.disabledAnalyzers }),
+        ...(this.options.programArchive === undefined
+          ? {}
+          : {
+              programArchive: {
+                mode: this.options.programArchive.mode,
+                path: this.options.programArchive.path,
+                key: this.options.programArchive.key,
+              },
+            }),
       });
       const scriptCommand = ghidraHeadlessCommand({
         environment: this.options.environment,
@@ -693,6 +709,15 @@ export interface GhidraHeadlessArgumentOptions {
   readonly disabledAnalyzers?: readonly string[];
   /** Canonical seed snapshot passed to the pre-analysis seed script. */
   readonly seedPath?: string;
+  /**
+   * Load a previously analyzed program instead of importing and analyzing the
+   * target, or save the analyzed program before the bridge serves.
+   */
+  readonly programArchive?: {
+    readonly mode: "create" | "load";
+    readonly path: string;
+    readonly key: string;
+  };
 }
 
 /** Build the complete read-only headless invocation in deterministic order. */
@@ -747,6 +772,33 @@ export const ghidraHeadlessArguments = (
     throw new Error(
       "A raw-binary import cannot be combined with a DOS import.",
     );
+  const archive = options.programArchive;
+  if (
+    archive !== undefined &&
+    (options.platform ?? process.platform) === "win32"
+  )
+    throw new Error("A Ghidra program archive is not admitted on Windows.");
+  // A loaded archive already holds the imported, prepared and analyzed program;
+  // only the bridge runs against it.
+  if (archive?.mode === "load")
+    return [
+      options.projectRoot,
+      "rea-project",
+      "-import",
+      archive.path,
+      "-noanalysis",
+      "-readOnly",
+      "-deleteProject",
+      "-log",
+      options.ghidraLogPath,
+      "-scriptlog",
+      options.scriptLogPath,
+      "-scriptPath",
+      bridgeDirectory,
+      "-postScript",
+      options.bridgeScriptPath,
+      options.descriptorPath,
+    ];
   return [
     options.projectRoot,
     "rea-project",
@@ -855,6 +907,18 @@ export const ghidraHeadlessArguments = (
       ? [
           "-postScript",
           scriptPath.join(bridgeDirectory, GHIDRA_BRIDGE_SOURCES.mipsSoftFloat),
+        ]
+      : []),
+    // Saves the finished analysis, including the repairs above, before serving.
+    ...(archive?.mode === "create"
+      ? [
+          "-postScript",
+          scriptPath.join(
+            bridgeDirectory,
+            GHIDRA_BRIDGE_SOURCES.saveProgramArchive,
+          ),
+          archive.path,
+          archive.key,
         ]
       : []),
     "-postScript",
