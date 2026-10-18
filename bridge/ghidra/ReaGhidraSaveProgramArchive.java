@@ -14,7 +14,7 @@ import java.nio.file.attribute.PosixFilePermissions;
  * Arguments: the archive path and the analysis key. The key is stored as a
  * program-information option first, so the archive carries it and the bridge
  * reports it for both this session and later sessions that load the archive.
- * The archive is written beside its destination and linked into place without
+ * The archive is written in a private directory beside its destination and linked into place without
  * replacing an existing file, so a failed or concurrent save never exposes a
  * partial archive. A save failure leaves the analysis usable; the outcome is
  * stored for the bridge handshake.
@@ -35,10 +35,18 @@ public final class ReaGhidraSaveProgramArchive extends GhidraScript {
         info.setBoolean(SAVED_OPTION, false);
         // Packing requires no open transaction; GhidraScript wraps run() in one.
         end(true);
-        Path partial = target.resolveSibling(target.getFileName() + "." + ProcessHandle.current().pid() + ".partial");
+        // Pack inside an owner-only directory on the destination's file system,
+        // so the archive is never readable by others before its mode is set.
+        Path privateDirectory = null;
+        Path partial = null;
         boolean saved = false;
         try {
-            Files.deleteIfExists(partial);
+            privateDirectory = Files.createTempDirectory(
+                target.getParent(),
+                ".rea-archive-",
+                PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rwx------"))
+            );
+            partial = privateDirectory.resolve("program.gzf");
             ((DomainObjectAdapterDB) currentProgram).saveToPackedFile(partial.toFile(), monitor);
             Files.setPosixFilePermissions(partial, PosixFilePermissions.fromString("rw-------"));
             try {
@@ -54,7 +62,8 @@ public final class ReaGhidraSaveProgramArchive extends GhidraScript {
             printerr("REA program archive save failed: " + failure);
         }
         finally {
-            Files.deleteIfExists(partial);
+            if (partial != null) Files.deleteIfExists(partial);
+            if (privateDirectory != null) Files.deleteIfExists(privateDirectory);
         }
         start();
         info.setBoolean(SAVED_OPTION, saved);
