@@ -158,6 +158,40 @@ describe("Ghidra program archive profile", () => {
     expect(commitment.mode).toBe("create");
     expect(resolved.value.profile?.digest).not.toBe(base.value.profile?.digest);
   });
+
+  it("keys identical seeds the same wherever they are selected from", async () => {
+    const archives = await workspace();
+    const seedDirectory = await workspace();
+    const seeds = "0x401000\tfunction\tentry\n";
+    const fixed = join(await workspace(), "seeds.tsv");
+    await writeFile(fixed, seeds);
+    await writeFile(join(seedDirectory, `${TARGET}.tsv`), seeds);
+    const keys: string[] = [];
+    for (const settings of [
+      { REA_GHIDRA_SEED_FILE: fixed },
+      { REA_GHIDRA_SEED_DIR: seedDirectory },
+    ]) {
+      const parsed = parseConfig({
+        GHIDRA_INSTALL_DIR: "/ghidra",
+        REA_GHIDRA_PROGRAM_ARCHIVE_DIR: archives,
+        ...settings,
+      });
+      if (!parsed.ok) throw parsed.error;
+      const resolved = await new GhidraProvider(
+        parsed.value,
+        silentLogger,
+        {},
+        host,
+      ).resolveAnalysisProfile(pe);
+      if (!resolved.ok) throw resolved.error;
+      keys.push(
+        ghidraProgramArchiveCommitmentSchema.parse(
+          resolved.value.profile?.parameters.program_archive,
+        ).key,
+      );
+    }
+    expect(keys[0]).toBe(keys[1]);
+  });
 });
 
 describe("Ghidra program archive session checks", () => {

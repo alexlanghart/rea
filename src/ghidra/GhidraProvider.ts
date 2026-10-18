@@ -56,7 +56,10 @@ import {
   resolveGhidraAnalysisSeeds,
   selectGhidraSeedSource,
 } from "./GhidraAnalysisSeeds.js";
-import { resolveGhidraProgramArchive } from "./GhidraProgramArchive.js";
+import {
+  ghidraProgramArchiveKey,
+  resolveGhidraProgramArchive,
+} from "./GhidraProgramArchive.js";
 import {
   admitGhidraLanguageOverride,
   GhidraLanguageCatalogCleanupError,
@@ -482,7 +485,7 @@ export class GhidraProvider implements AnalysisProviderCandidate {
     const archive = await resolveGhidraProgramArchive(
       this.config.ghidraProgramArchiveDir,
       target.sha256,
-      analyzed.digest,
+      ghidraProgramArchiveKey(analyzed),
       installation.platform,
       target.path,
     );

@@ -5,6 +5,11 @@ import { z } from "zod";
 import type { AnalysisOperation } from "../application/AnalysisProvider.js";
 import type { AnalysisError } from "../domain/analysisErrorBase.js";
 import { AnalysisUnsupportedTargetError } from "../domain/analysisErrorCore.js";
+import {
+  createAnalysisProfile,
+  type AnalysisProfileCommitment,
+} from "../domain/analysisProfile.js";
+import type { JsonValue } from "../domain/jsonValue.js";
 import { ProviderAdapterError } from "../domain/providerAdapterError.js";
 import { err, ok, type Result } from "../domain/result.js";
 import { ghidraFileFailure } from "./GhidraFileArtifacts.js";
@@ -18,9 +23,9 @@ const digest = z.string().regex(/^[a-f0-9]{64}$/u);
 
 /**
  * A caller-selected archive of an analyzed Ghidra program, committed into the
- * analysis profile before launch. `key` is the digest of the profile the
- * archive was (or will be) analyzed under, before this commitment was added;
- * together with the target digest it names the archive file.
+ * analysis profile before launch. `key` is the {@link ghidraProgramArchiveKey}
+ * of the profile the archive was (or will be) analyzed under, before this
+ * commitment was added; together with the target digest it names the file.
  */
 export const ghidraProgramArchiveCommitmentSchema = z.strictObject({
   format: z.literal(GHIDRA_PROGRAM_ARCHIVE_FORMAT),
@@ -35,6 +40,28 @@ export const ghidraProgramArchiveCommitmentSchema = z.strictObject({
 export type GhidraProgramArchiveCommitment = z.infer<
   typeof ghidraProgramArchiveCommitmentSchema
 >;
+
+/**
+ * Digest of the analysis-affecting profile. Seed file locations are provenance,
+ * not inputs: the committed seed digest already covers their content, so moving
+ * or re-selecting the same seeds keeps the archive.
+ */
+export const ghidraProgramArchiveKey = (
+  profile: AnalysisProfileCommitment,
+): string => {
+  const { analysis_seeds: seeds, ...parameters } = profile.parameters;
+  if (typeof seeds !== "object" || seeds === null || Array.isArray(seeds))
+    return profile.digest;
+  const {
+    path: _path,
+    configured_path: _configuredPath,
+    ...content
+  } = seeds as Record<string, JsonValue>;
+  return createAnalysisProfile(profile.provider, {
+    ...parameters,
+    analysis_seeds: content,
+  }).digest;
+};
 
 /** Archive file name for one target analyzed under one profile. */
 export const ghidraProgramArchiveName = (
