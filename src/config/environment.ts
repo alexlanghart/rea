@@ -63,6 +63,11 @@ const environmentSchema = z.object({
     .min(1)
     .refine(isAbsolute, "REA_GHIDRA_SEED_FILE must be absolute")
     .optional(),
+  REA_GHIDRA_SEED_DIR: z
+    .string()
+    .min(1)
+    .refine(isAbsolute, "REA_GHIDRA_SEED_DIR must be absolute")
+    .optional(),
   REA_GHIDRA_PROGRAM_ARCHIVE_DIR: z
     .string()
     .min(1)
@@ -193,6 +198,21 @@ export const parseEnvironment = (
           {
             setting: "REA_GHIDRA_COMPILER_SPEC_ID",
             constraint: "requires REA_GHIDRA_LANGUAGE_ID",
+          },
+        ],
+      }),
+    );
+  // One seed source per server: a fixed file for every target, or per-target files.
+  if (
+    env.REA_GHIDRA_SEED_DIR !== undefined &&
+    env.REA_GHIDRA_SEED_FILE !== undefined
+  )
+    return err(
+      new ConfigurationError("Invalid REA environment configuration", {
+        settings: [
+          {
+            setting: "REA_GHIDRA_SEED_DIR",
+            constraint: "cannot be combined with REA_GHIDRA_SEED_FILE",
           },
         ],
       }),

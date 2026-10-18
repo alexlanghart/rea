@@ -14,7 +14,9 @@ import {
   ghidraSeedCommitmentSchema,
   ghidraSeedFailure,
   ghidraSeedLimitations,
+  ghidraTargetSeedName,
 } from "./GhidraAnalysisSeeds.js";
+import { join } from "node:path";
 import {
   ghidraProgramArchiveCommitmentSchema,
   ghidraProgramArchiveFailure,
@@ -194,15 +196,22 @@ export const createGhidraProviderClient = (input: {
   const seedProfile = ghidraSeedCommitmentSchema
     .optional()
     .safeParse(committedProfile.parameters.analysis_seeds);
-  if (
-    !seedProfile.success ||
-    (config.ghidraSeedFile === undefined) !== (seedProfile.data === undefined)
-  )
+  // A seed directory commits this target's file when it exists, and no seeds otherwise.
+  const seedSourceMatches =
+    seedProfile.success &&
+    (config.ghidraSeedFile !== undefined
+      ? seedProfile.data !== undefined
+      : config.ghidraSeedDir !== undefined
+        ? seedProfile.data === undefined ||
+          seedProfile.data.configured_path ===
+            join(config.ghidraSeedDir, ghidraTargetSeedName(target.sha256))
+        : seedProfile.data === undefined);
+  if (!seedProfile.success || !seedSourceMatches)
     return err(
       new ProviderAdapterError("ghidra", "open_binary", {
         diagnostics: {
           reason:
-            "Resolve REA_GHIDRA_SEED_FILE into an analysis profile before opening the session.",
+            "Resolve REA_GHIDRA_SEED_FILE or REA_GHIDRA_SEED_DIR into an analysis profile for this target before opening the session.",
         },
       }),
     );

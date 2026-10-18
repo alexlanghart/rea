@@ -20,6 +20,7 @@ import {
   ghidraSeedLimitations,
   parseGhidraSeeds,
   resolveGhidraAnalysisSeeds,
+  selectGhidraSeedSource,
   snapshotGhidraAnalysisSeeds,
   type GhidraSeedCommitment,
   type GhidraSeedReport,
@@ -257,5 +258,54 @@ describe("Ghidra seed profile", () => {
   it("requires an absolute seed path", () => {
     const parsed = parseConfig({ REA_GHIDRA_SEED_FILE: "seeds.tsv" });
     expect(parsed.ok).toBe(false);
+  });
+
+  it("selects only this target's file from a seed directory", async () => {
+    const directory = await workspace();
+    await writeFile(join(directory, `${pe.sha256}.tsv`), SEEDS);
+    const parsed = parseConfig({
+      GHIDRA_INSTALL_DIR: "/ghidra",
+      REA_GHIDRA_SEED_DIR: directory,
+    });
+    if (!parsed.ok) throw parsed.error;
+    const ghidra = new GhidraProvider(parsed.value, silentLogger, {}, host);
+    const seeded = await ghidra.resolveAnalysisProfile(pe);
+    if (!seeded.ok) throw seeded.error;
+    expect(seeded.value.profile?.parameters.analysis_seeds).toMatchObject({
+      configured_path: join(directory, `${pe.sha256}.tsv`),
+      entries: { function: 2, code: 1, label: 1 },
+    });
+    const other = await ghidra.resolveAnalysisProfile({
+      ...pe,
+      sha256: "c".repeat(64),
+    });
+    if (!other.ok) throw other.error;
+    expect(other.value.profile?.parameters.analysis_seeds).toBeUndefined();
+  });
+
+  it("refuses a seed directory combined with a seed file", () => {
+    const parsed = parseConfig({
+      REA_GHIDRA_SEED_DIR: "/seeds",
+      REA_GHIDRA_SEED_FILE: "/seeds.tsv",
+    });
+    expect(parsed.ok).toBe(false);
+  });
+});
+
+describe("Ghidra seed source selection", () => {
+  it("prefers the fixed file and ignores a directory without a target file", async () => {
+    const directory = await workspace();
+    expect(
+      await selectGhidraSeedSource("/fixed.tsv", undefined, "a".repeat(64)),
+    ).toEqual({
+      ok: true,
+      value: { path: "/fixed.tsv", setting: "REA_GHIDRA_SEED_FILE" },
+    });
+    expect(
+      await selectGhidraSeedSource(undefined, directory, "a".repeat(64)),
+    ).toEqual({ ok: true, value: undefined });
+    expect(
+      await selectGhidraSeedSource(undefined, undefined, "a".repeat(64)),
+    ).toEqual({ ok: true, value: undefined });
   });
 });

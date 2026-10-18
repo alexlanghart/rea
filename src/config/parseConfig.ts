@@ -78,6 +78,9 @@ export const parseConfig = (
     ...(env.REA_GHIDRA_SEED_FILE === undefined
       ? {}
       : { ghidraSeedFile: env.REA_GHIDRA_SEED_FILE }),
+    ...(env.REA_GHIDRA_SEED_DIR === undefined
+      ? {}
+      : { ghidraSeedDir: env.REA_GHIDRA_SEED_DIR }),
     ...(env.REA_GHIDRA_PROGRAM_ARCHIVE_DIR === undefined
       ? {}
       : { ghidraProgramArchiveDir: env.REA_GHIDRA_PROGRAM_ARCHIVE_DIR }),

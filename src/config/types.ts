@@ -16,6 +16,8 @@ export interface AppConfig {
   readonly ghidraLanguageOverride?: GhidraLanguageOverride;
   readonly ghidraDisabledAnalyzers?: readonly string[];
   readonly ghidraSeedFile?: string;
+  /** Directory of per-target seed files named `<target-sha256>.tsv`. */
+  readonly ghidraSeedDir?: string;
   /** Directory of analyzed-program archives reused across Ghidra sessions. */
   readonly ghidraProgramArchiveDir?: string;
   readonly ghidraNativeAotJar?: string;

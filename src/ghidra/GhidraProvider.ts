@@ -52,7 +52,10 @@ import {
 } from "./GhidraInstallation.js";
 import { resolveGhidraAnalysisProfile } from "./GhidraAnalysisProfile.js";
 import { AnalysisCancelledError } from "../domain/analysisErrorCore.js";
-import { resolveGhidraAnalysisSeeds } from "./GhidraAnalysisSeeds.js";
+import {
+  resolveGhidraAnalysisSeeds,
+  selectGhidraSeedSource,
+} from "./GhidraAnalysisSeeds.js";
 import { resolveGhidraProgramArchive } from "./GhidraProgramArchive.js";
 import {
   admitGhidraLanguageOverride,
@@ -447,10 +450,17 @@ export class GhidraProvider implements AnalysisProviderCandidate {
           cause: options.signal.reason,
         }),
       );
-    const seeds = await resolveGhidraAnalysisSeeds(
+    const seedSource = await selectGhidraSeedSource(
       this.config.ghidraSeedFile,
+      this.config.ghidraSeedDir,
+      target.sha256,
+    );
+    if (!seedSource.ok) return seedSource;
+    const seeds = await resolveGhidraAnalysisSeeds(
+      seedSource.value?.path,
       this.#inspectionResources,
       options?.signal,
+      seedSource.value?.setting,
     );
     if (!seeds.ok) return seeds;
     const analyzed =

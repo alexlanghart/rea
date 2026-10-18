@@ -1062,6 +1062,17 @@ Each line is `address<TAB>kind[<TAB>name]`, where kind is `function`, `code` or 
 
 Label seeds can name mapped uninitialized storage such as `.bss`; function and code seeds require initialized bytes.
 
+To seed several targets from one server, use a directory of per-target files
+instead of a single file:
+
+```bash
+export REA_GHIDRA_SEED_DIR=/absolute/path/to/seeds   # contains <target-sha256>.tsv
+```
+
+A target is seeded only when `<its sha256>.tsv` exists in the directory; other
+targets are analyzed without seeds. `REA_GHIDRA_SEED_DIR` cannot be combined
+with `REA_GHIDRA_SEED_FILE`.
+
 ### Reusing analyzed programs across sessions
 
 Each session normally imports and auto-analyzes the target again. For large

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdir, realpath } from "node:fs/promises";
+import { lstat, mkdir, realpath } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
 import { z } from "zod";
 
@@ -164,11 +164,51 @@ const readSeeds = (
     },
   );
 
-/** Resolve the configured seed file into an immutable profile commitment. */
+/** A seed file selected for one target, with the setting that selected it. */
+export interface GhidraSeedSource {
+  readonly path: string;
+  readonly setting: "REA_GHIDRA_SEED_FILE" | "REA_GHIDRA_SEED_DIR";
+}
+
+/** Per-target seed file name inside `REA_GHIDRA_SEED_DIR`. */
+export const ghidraTargetSeedName = (targetSha256: string): string =>
+  `${targetSha256}.tsv`;
+
+/**
+ * Select the seeds for one target: the fixed seed file, or the target's file in
+ * the seed directory when one exists. A directory without a file for this
+ * target selects no seeds.
+ */
+export const selectGhidraSeedSource = async (
+  seedFile: string | undefined,
+  seedDirectory: string | undefined,
+  targetSha256: string,
+): Promise<Result<GhidraSeedSource | undefined, AnalysisError>> => {
+  if (seedFile !== undefined)
+    return ok({ path: seedFile, setting: "REA_GHIDRA_SEED_FILE" });
+  if (seedDirectory === undefined) return ok(undefined);
+  const path = join(seedDirectory, ghidraTargetSeedName(targetSha256));
+  try {
+    await lstat(path);
+  } catch (cause: unknown) {
+    if (cause instanceof Error && "code" in cause && cause.code === "ENOENT")
+      return ok(undefined);
+    return err(
+      ghidraFileFailure(cause, "resolve_analysis_profile", {
+        setting: "REA_GHIDRA_SEED_DIR",
+        path,
+      }),
+    );
+  }
+  return ok({ path, setting: "REA_GHIDRA_SEED_DIR" });
+};
+
+/** Resolve the selected seed file into an immutable profile commitment. */
 export const resolveGhidraAnalysisSeeds = async (
   configured: string | undefined,
   resources: ArtifactResourceScope,
   signal?: AbortSignal,
+  setting: GhidraSeedSource["setting"] = "REA_GHIDRA_SEED_FILE",
 ): Promise<Result<GhidraSeedCommitment | undefined, AnalysisError>> =>
   resources
     .run(async () => {
@@ -181,7 +221,7 @@ export const resolveGhidraAnalysisSeeds = async (
       } catch (cause: unknown) {
         return err(
           ghidraFileFailure(cause, "resolve_analysis_profile", {
-            setting: "REA_GHIDRA_SEED_FILE",
+            setting,
             path: configured,
           }),
         );
@@ -200,7 +240,7 @@ export const resolveGhidraAnalysisSeeds = async (
     .catch((cause: unknown) =>
       err(
         ghidraFileFailure(cause, "resolve_analysis_profile", {
-          setting: "REA_GHIDRA_SEED_FILE",
+          setting,
         }),
       ),
     );
